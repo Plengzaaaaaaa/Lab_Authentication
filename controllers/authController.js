@@ -1,20 +1,14 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const User = require("../models/user");
+const User = require("../models/user"); // Corrected from Product to User
 
-// Register ลงทะเบียน
+// Register
 exports.register = async (req, res) => {
-    const { user_name, password, name, role } = req.body;
+    const { username, password,name,role } = req.body;
     try {
-        // ตรวจสอบว่าผู้ใช้งานนี้มีอยู่แล้วหรือไม่
-        const existingUser = await User.findOne({ user_name });
-        if (existingUser) {
-            return res.status(400).send("Username already exists");
-        }
-
         const hashedPassword = await bcrypt.hash(password, 10);
-        const user = new User({ user_name, password: hashedPassword, name, role });
+        const user = new User({ username, password: hashedPassword,name,role  });
         await user.save();
         res.status(201).send("User registered");
     } catch (err) {
@@ -22,62 +16,58 @@ exports.register = async (req, res) => {
     }
 };
 
-// Login ยืนยันตัวตน
+// Login
 exports.login = async (req, res) => {
-    const { user_name, password } = req.body;
+    const { username, password } = req.body;
     try {
-        const tmpuser = await User.findOne({ user_name });
-        if (!tmpuser) return res.status(400).send("User not found");
-        const isMatch = await bcrypt.compare(password, tmpuser.password);
+        const user = await User.findOne({ username });
+        if (!user) return res.status(400).send("User not found");
+        const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).send("Invalid credentials");
-        
-        // ตรวจสอบ role
-        if (!tmpuser.role) return res.status(400).send("Role not found");
 
         const accessToken = jwt.sign(
-            { userId: tmpuser._id },
+            { userId: user._id, role: user.role }, // เพิ่ม role
             process.env.ACCESS_TOKEN_SECRET,
-            { expiresIn: "1h" } 
+            { expiresIn: "3h" }
         );
 
         const refreshToken = jwt.sign(
-            { userId: tmpuser._id },
+            { userId: user._id },
             process.env.REFRESH_TOKEN_SECRET
         );
-
-        tmpuser.refreshToken = refreshToken; // บันทึก refreshToken ในฐานข้อมูล
-        await tmpuser.save();
-
-        res.json({ user: tmpuser, accessToken, refreshToken });
+        res.json({user, accessToken, refreshToken, role: user.role }); // ส่งคืน role ด้วย
     } catch (err) {
         res.status(500).send(err.message);
     }
 };
 
-// Refresh access token มาใหม่
+// Refresh
 exports.refresh = async (req, res) => {
     const { token } = req.body;
     if (!token) return res.sendStatus(401);
     jwt.verify(token, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
-        if (err) return res.status(403).send("Invalid or expired token");
+        if (err) return res.sendStatus(403);
         const accessToken = jwt.sign(
             { userId: user.userId },
             process.env.ACCESS_TOKEN_SECRET,
-            { expiresIn: "1h" }
+            { expiresIn: "15m" }
         );
         res.json({ accessToken });
     });
 };
 
-// Logout
-exports.logout = async (req, res) => {
-    const { token } = req.body;
-    if (!token) return res.sendStatus(401);
-
-    const user = await User.findOne({ refreshToken: token });
-    if (!user) return res.sendStatus(403);
-
-    user.refreshToken = null; // ลบ refreshToken
-    await user.save();
-    res.sendStatus(204);
+// Check username
+exports.check_username = async (req, res) => {
+    const { username } = req.body;
+    try {
+        const user = await User.findOne({ username });
+        if (user) {
+            // ถ้า username มีอยู่ในฐานข้อมูล
+            return res.json({ exists: true });
+        }
+        // ถ้า username ไม่มีในฐานข้อมูล
+        return res.json({ exists: false });
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
 };

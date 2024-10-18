@@ -1,15 +1,17 @@
 const express = require("express");
 const router = express.Router();
+const authController = require("../controllers/authController"); // แก้ไขให้ตรงกับ path ของ controller
 
 const { register, login, refresh } = require("../controllers/authController");
 
-// เส้นทางลงทะเบียน
+router.post("/", async (req,res) => {
+    res.sendStatus(400);
+});
+
 router.post("/register", register);
-
-// เส้นทางเข้าสู่ระบบ
-router.post("/login", login);
-
-// เส้นทางรีเฟรชโทเค็น
-router.post("/refresh", refresh);
+router.post("/login" , login);
+router.post("/refresh" , refresh);
+// Check username
+router.post("/check_username", authController.check_username); // เพิ่ม route สำหรับ check_username
 
 module.exports = router;
